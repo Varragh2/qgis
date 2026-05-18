@@ -45,8 +45,12 @@ def _configure_qgis_runtime() -> str | None:
 
 QGIS_PREFIX = _configure_qgis_runtime()
 
+TESTS_DIR = PROJECT_ROOT / "tests"
+
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
+if str(TESTS_DIR) not in sys.path:
+    sys.path.insert(0, str(TESTS_DIR))
 
 
 @pytest.fixture(scope="session")
@@ -59,7 +63,18 @@ def qgs_app():
     QgsApplication.setPrefixPath(QGIS_PREFIX, True)
     app = QgsApplication([], False)
     app.initQgis()
+
+    contents_dir = Path(QGIS_PREFIX).parent
+    plugins_path = contents_dir / "Resources" / "qgis" / "python" / "plugins"
+    if plugins_path.is_dir() and str(plugins_path) not in sys.path:
+        sys.path.insert(0, str(plugins_path))
+    from processing.core.Processing import Processing
+
+    Processing.initialize()
+
     yield app
+
+    Processing.deinitialize()
     app.exitQgis()
 
 
@@ -76,3 +91,14 @@ def gpx_inbox(tmp_path):
 @pytest.fixture
 def gpkg_path(tmp_path):
     return str(tmp_path / "test_temporal.gpkg")
+
+
+@pytest.fixture
+def roads_completion_paths(tmp_path):
+    """Paths for walked and checklist GeoPackages in a temp directory."""
+    gpkg_dir = tmp_path / "geopackages"
+    gpkg_dir.mkdir()
+    return {
+        "walked": str(gpkg_dir / "walked_roads.gpkg"),
+        "checklist": str(gpkg_dir / "roads_checklist.gpkg"),
+    }

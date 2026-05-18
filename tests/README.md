@@ -39,3 +39,4 @@ export GDAL_DATA="/Applications/QGIS-final-4_0_2.app/Contents/Resources/qgis/gda
 
 - `parse_gpx_time_range`: min/max timestamps from GPX `<time>` elements
 - `import_gpx_directory`: one feature per file, filename deduplication, in-place GeoPackage append (no layer wipe on re-import)
+- `roads_completion`: filename dedup on walked GPKG, subtract already-walked geometry, checklist one row per road, GPKG output (`test_roads_completion_helpers.py`, `test_roads_completion_pipeline.py`)

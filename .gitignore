@@ -74,6 +74,7 @@ dmypy.json
 Thumbs.db
 
 /webmap
-/geopackages
-walk-all-sf-roads.qgz
 /temporal
+walk-all-sf-roads.qgz
+# QGIS generated outputs
+geopackages/*.gpkg
