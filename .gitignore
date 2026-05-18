@@ -72,3 +72,7 @@ dmypy.json
 # OS
 .DS_Store
 Thumbs.db
+
+/webmap
+/geopackages
+walk-all-sf-roads.qgz
