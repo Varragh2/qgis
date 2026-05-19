@@ -20,7 +20,7 @@ CHECKLIST_LAYER = "checklist"
 TEST_BUFFER = 50
 
 
-def _config(roads, gps, paths) -> RoadsCompletionConfig:
+def _config(roads, gps, paths, completion_threshold: float = 70) -> RoadsCompletionConfig:
     return RoadsCompletionConfig(
         road_layer=roads,
         gps_layer=gps,
@@ -29,7 +29,7 @@ def _config(roads, gps, paths) -> RoadsCompletionConfig:
         walked_layer_name=WALKED_LAYER,
         checklist_layer_name=CHECKLIST_LAYER,
         buffer_dist=TEST_BUFFER,
-        completion_threshold=70,
+        completion_threshold=completion_threshold,
         project=QgsProject.instance(),
         verbose=False,
     )
@@ -45,6 +45,10 @@ def _datetime_text(value) -> str | None:
     if value and value.isValid():
         return value.toString("yyyy-MM-dd HH:mm:ss")
     return None
+
+
+def _checklist_feature(layer: QgsVectorLayer, road_name: str):
+    return [f for f in layer.getFeatures() if f["name"] == road_name][0]
 
 
 def test_first_run_writes_gpkg_and_unique_checklist(qgs_app, roads_completion_paths):
@@ -177,3 +181,43 @@ def test_temporal_attributes_preserved_on_walked(qgs_app, roads_completion_paths
     assert feat["start_date"].isValid()
     assert feat["end_date"].isValid()
     assert not feat.geometry().isEmpty()
+
+
+def test_checklist_completion_dates_are_set_once(qgs_app, roads_completion_paths):
+    QgsProject.instance().clear()
+    roads = make_test_roads_layer()
+
+    run_roads_completion(
+        _config(
+            roads,
+            make_test_gps_layer([WALK_OAK_EARLY]),
+            roads_completion_paths,
+            completion_threshold=50,
+        )
+    )
+
+    checklist = _open_layer(roads_completion_paths["checklist"], CHECKLIST_LAYER)
+    oak = _checklist_feature(checklist, OAK_ST)
+    assert oak["completed"] == 1
+    assert _datetime_text(oak["start_date"]) == "2024-01-01 08:00:00"
+    assert _datetime_text(oak["end_date"]) == "2024-01-01 09:00:00"
+
+    run_roads_completion(
+        _config(
+            roads,
+            make_test_gps_layer([WALK_OAK_LATE]),
+            roads_completion_paths,
+            completion_threshold=50,
+        )
+    )
+
+    checklist_after_later_walk = _open_layer(
+        roads_completion_paths["checklist"], CHECKLIST_LAYER
+    )
+    oak_after_later_walk = _checklist_feature(checklist_after_later_walk, OAK_ST)
+    assert oak_after_later_walk["completed"] == 1
+    assert (
+        _datetime_text(oak_after_later_walk["start_date"])
+        == "2024-01-01 08:00:00"
+    )
+    assert _datetime_text(oak_after_later_walk["end_date"]) == "2024-01-01 09:00:00"
