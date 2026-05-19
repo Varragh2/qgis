@@ -41,6 +41,12 @@ def _open_layer(gpkg_path: str, layer_name: str) -> QgsVectorLayer:
     return layer
 
 
+def _datetime_text(value) -> str | None:
+    if value and value.isValid():
+        return value.toString("yyyy-MM-dd HH:mm:ss")
+    return None
+
+
 def test_first_run_writes_gpkg_and_unique_checklist(qgs_app, roads_completion_paths):
     QgsProject.instance().clear()
     roads = make_test_roads_layer()
@@ -62,6 +68,13 @@ def test_first_run_writes_gpkg_and_unique_checklist(qgs_app, roads_completion_pa
     checklist_names = [f["name"] for f in checklist.getFeatures()]
     assert len(checklist_names) == len(set(checklist_names))
     assert set(checklist_names) == {OAK_ST, PINE_ST}
+    assert checklist.fields().indexFromName("start_date") >= 0
+    assert checklist.fields().indexFromName("end_date") >= 0
+
+    checklist_by_name = {f["name"]: f for f in checklist.getFeatures()}
+    assert checklist_by_name[OAK_ST]["completed"] == 0
+    assert _datetime_text(checklist_by_name[OAK_ST]["start_date"]) is None
+    assert _datetime_text(checklist_by_name[OAK_ST]["end_date"]) is None
 
     walked_filenames = {f["filename"] for f in walked.getFeatures()}
     assert "walk_oak_early.gpx" in walked_filenames
@@ -124,9 +137,31 @@ def test_third_run_adds_net_new_oak_segment(qgs_app, roads_completion_paths):
     assert "2024-01-01" in start_dates
     assert "2024-02-01" in start_dates
 
+    dates_by_filename = {
+        f["filename"]: _datetime_text(f["start_date"])
+        for f in oak_feats
+    }
+    assert dates_by_filename["walk_oak_early.gpx"] == "2024-01-01 08:00:00"
+    assert dates_by_filename["walk_oak_late.gpx"] == "2024-02-01 08:00:00"
+
     checklist = _open_layer(roads_completion_paths["checklist"], CHECKLIST_LAYER)
     oak_rows = [f for f in checklist.getFeatures() if f["name"] == OAK_ST]
     assert len(oak_rows) == 1
+    assert oak_rows[0]["completed"] == 1
+    assert _datetime_text(oak_rows[0]["start_date"]) == "2024-02-01 08:00:00"
+    assert _datetime_text(oak_rows[0]["end_date"]) == "2024-02-01 09:00:00"
+
+    run_roads_completion(
+        _config(roads, make_test_gps_layer([WALK_OAK_LATE]), roads_completion_paths)
+    )
+    checklist_refreshed = _open_layer(
+        roads_completion_paths["checklist"], CHECKLIST_LAYER
+    )
+    oak_refreshed = [
+        f for f in checklist_refreshed.getFeatures() if f["name"] == OAK_ST
+    ][0]
+    assert _datetime_text(oak_refreshed["start_date"]) == "2024-02-01 08:00:00"
+    assert _datetime_text(oak_refreshed["end_date"]) == "2024-02-01 09:00:00"
 
 
 def test_temporal_attributes_preserved_on_walked(qgs_app, roads_completion_paths):

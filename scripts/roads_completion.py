@@ -32,6 +32,8 @@ CHECKLIST_SCHEMA_URI = (
     "&field=walked_len:double"
     "&field=percent_walked:double"
     "&field=completed:integer"
+    "&field=start_date:datetime"
+    "&field=end_date:datetime"
 )
 
 
@@ -211,6 +213,56 @@ def _walked_union_by_road_name(walked_layer: QgsVectorLayer) -> dict[str, QgsGeo
     }
 
 
+def _has_valid_datetime(value) -> bool:
+    return bool(value and hasattr(value, "isValid") and value.isValid())
+
+
+def _walked_sort_key(feat: QgsFeature) -> tuple[int, int, str]:
+    start_date = feat["start_date"]
+    filename = feat["filename"] or ""
+    if _has_valid_datetime(start_date):
+        return (0, start_date.toMSecsSinceEpoch(), filename)
+    return (1, 0, filename)
+
+
+def _completion_dates_by_road_name(
+    walked_layer: QgsVectorLayer,
+    road_lengths: dict[str, float],
+    completion_threshold: float,
+) -> dict[str, tuple[object, object]]:
+    by_name: dict[str, list[QgsFeature]] = {}
+    for feat in walked_layer.getFeatures():
+        name = feat["name"]
+        geom = feat.geometry()
+        if not name or geom is None or geom.isEmpty():
+            continue
+        by_name.setdefault(name, []).append(QgsFeature(feat))
+
+    completion_dates: dict[str, tuple[object, object]] = {}
+    for name, features in by_name.items():
+        road_length = road_lengths.get(name) or 0
+        if road_length <= 0:
+            continue
+
+        cumulative: QgsGeometry | None = None
+        for feat in sorted(features, key=_walked_sort_key):
+            geom = QgsGeometry(feat.geometry())
+            if cumulative is None:
+                cumulative = geom
+            else:
+                cumulative = _union_geometries([cumulative, geom])
+
+            if cumulative is None or cumulative.isEmpty():
+                continue
+
+            percent_walked = (cumulative.length() / road_length) * 100
+            if percent_walked >= completion_threshold:
+                completion_dates[name] = (feat["start_date"], feat["end_date"])
+                break
+
+    return completion_dates
+
+
 def subtract_already_walked(
     segment_layer: QgsVectorLayer,
     walked_layer: QgsVectorLayer,
@@ -257,94 +309,51 @@ def build_checklist_layer(
     walked_layer: QgsVectorLayer,
     completion_threshold: float,
 ) -> QgsVectorLayer:
-    """One feature per road name with walked_len, percent_walked, and completed flag."""
-    if walked_layer.featureCount() == 0:
-        stats_ready = None
-    else:
-        walked_dissolved = _processing_run(
-            "native:dissolve",
-            {
-                "INPUT": walked_layer,
-                "FIELD": ["name"],
-                "OUTPUT": "TEMPORARY_OUTPUT",
-            },
-        )["OUTPUT"]
-        with_len = _processing_run(
-            "native:fieldcalculator",
-            {
-                "INPUT": walked_dissolved,
-                "FIELD_NAME": "walked_len",
-                "FIELD_TYPE": 0,
-                "FORMULA": "$length",
-                "OUTPUT": "TEMPORARY_OUTPUT",
-            },
-        )["OUTPUT"]
-        with_pct = _processing_run(
-            "native:fieldcalculator",
-            {
-                "INPUT": with_len,
-                "FIELD_NAME": "percent_walked",
-                "FIELD_TYPE": 0,
-                "FORMULA": '("walked_len" / "length_m") * 100',
-                "OUTPUT": "TEMPORARY_OUTPUT",
-            },
-        )["OUTPUT"]
-        stats_ready = _processing_run(
-            "native:fieldcalculator",
-            {
-                "INPUT": with_pct,
-                "FIELD_NAME": "completed",
-                "FIELD_TYPE": 1,
-                "FORMULA": f'to_int("percent_walked" >= {completion_threshold})',
-                "OUTPUT": "TEMPORARY_OUTPUT",
-            },
-        )["OUTPUT"]
+    """One feature per road name with walked stats, completion flag, and dates."""
+    crs = roads_dissolved.crs().authid()
+    checklist = QgsVectorLayer(
+        CHECKLIST_SCHEMA_URI.format(crs=crs),
+        "checklist",
+        "memory",
+    )
+    provider = checklist.dataProvider()
 
-    if stats_ready is None:
-        zero_len = _processing_run(
-            "native:fieldcalculator",
-            {
-                "INPUT": roads_dissolved,
-                "FIELD_NAME": "walked_len",
-                "FIELD_TYPE": 0,
-                "FORMULA": "0",
-                "OUTPUT": "TEMPORARY_OUTPUT",
-            },
-        )["OUTPUT"]
-        zero_pct = _processing_run(
-            "native:fieldcalculator",
-            {
-                "INPUT": zero_len,
-                "FIELD_NAME": "percent_walked",
-                "FIELD_TYPE": 0,
-                "FORMULA": "0",
-                "OUTPUT": "TEMPORARY_OUTPUT",
-            },
-        )["OUTPUT"]
-        return _processing_run(
-            "native:fieldcalculator",
-            {
-                "INPUT": zero_pct,
-                "FIELD_NAME": "completed",
-                "FIELD_TYPE": 1,
-                "FORMULA": "0",
-                "OUTPUT": "TEMPORARY_OUTPUT",
-            },
-        )["OUTPUT"]
+    walked_by_name = _walked_union_by_road_name(walked_layer)
+    road_lengths: dict[str, float] = {}
+    road_features: list[QgsFeature] = []
+    for road in roads_dissolved.getFeatures():
+        name = road["name"]
+        road_lengths[name] = road["length_m"] or 0
+        road_features.append(QgsFeature(road))
 
-    return _processing_run(
-        "native:joinattributestable",
-        {
-            "INPUT": roads_dissolved,
-            "FIELD": "name",
-            "INPUT_2": stats_ready,
-            "FIELD_2": "name",
-            "FIELDS_TO_COPY": ["walked_len", "percent_walked", "completed"],
-            "METHOD": 1,
-            "DISCARD_NONMATCHING": False,
-            "OUTPUT": "TEMPORARY_OUTPUT",
-        },
-    )["OUTPUT"]
+    completion_dates = _completion_dates_by_road_name(
+        walked_layer, road_lengths, completion_threshold
+    )
+
+    output_features: list[QgsFeature] = []
+    for road in road_features:
+        name = road["name"]
+        length_m = road_lengths.get(name) or 0
+        walked_geom = walked_by_name.get(name)
+        walked_len = walked_geom.length() if walked_geom is not None else 0
+        percent_walked = (walked_len / length_m) * 100 if length_m > 0 else 0
+        completed = int(percent_walked >= completion_threshold)
+        start_date, end_date = completion_dates.get(name, (None, None))
+
+        feat = QgsFeature(checklist.fields())
+        feat.setGeometry(QgsGeometry(road.geometry()))
+        feat.setAttribute("name", name)
+        feat.setAttribute("length_m", length_m)
+        feat.setAttribute("walked_len", walked_len)
+        feat.setAttribute("percent_walked", percent_walked)
+        feat.setAttribute("completed", completed)
+        feat.setAttribute("start_date", start_date if completed else None)
+        feat.setAttribute("end_date", end_date if completed else None)
+        output_features.append(feat)
+
+    provider.addFeatures(output_features)
+    checklist.updateExtents()
+    return checklist
 
 
 def ensure_gpkg_layer(
