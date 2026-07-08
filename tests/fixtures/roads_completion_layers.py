@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from qgis.core import QgsFeature, QgsGeometry, QgsPointXY, QgsVectorLayer
-from qgis.PyQt.QtCore import QDateTime
+from qgis.PyQt.QtCore import QDateTime, Qt
 
 TEST_CRS = "EPSG:3857"
 
@@ -63,18 +63,17 @@ def make_test_gps_layer(
     )
     features: list[QgsFeature] = []
     for walk in walks:
+        start_date = QDateTime.fromString(walk.start_date, "yyyy-MM-dd HH:mm:ss")
+        end_date = QDateTime.fromString(walk.end_date, "yyyy-MM-dd HH:mm:ss")
+        start_date.setTimeSpec(Qt.TimeSpec.UTC)
+        end_date.setTimeSpec(Qt.TimeSpec.UTC)
+
         feat = QgsFeature(layer.fields())
         points = [QgsPointXY(x, y) for x, y in walk.points]
         feat.setGeometry(QgsGeometry.fromMultiPolylineXY([points]))
         feat.setAttribute("filename", walk.filename)
-        feat.setAttribute(
-            "start_date",
-            QDateTime.fromString(walk.start_date, "yyyy-MM-dd HH:mm:ss"),
-        )
-        feat.setAttribute(
-            "end_date",
-            QDateTime.fromString(walk.end_date, "yyyy-MM-dd HH:mm:ss"),
-        )
+        feat.setAttribute("start_date", start_date)
+        feat.setAttribute("end_date", end_date)
         features.append(feat)
 
     layer.dataProvider().addFeatures(features)

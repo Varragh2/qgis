@@ -60,6 +60,7 @@ class RoadsCompletionConfig:
     crs: str = "EPSG:3857"
     project: QgsProject | None = None
     verbose: bool = True
+    register_layers: bool = True
 
 
 def existing_processed_filenames(walked_layer: QgsVectorLayer) -> set[str]:
@@ -495,8 +496,9 @@ def run_roads_completion(config: RoadsCompletionConfig) -> CompletionResult:
         project,
     )
 
-    _register_layer(project, walked_gpkg, config.walked_layer_name)
-    _register_layer(project, checklist_gpkg, config.checklist_layer_name)
+    if config.register_layers:
+        _register_layer(project, walked_gpkg, config.walked_layer_name)
+        _register_layer(project, checklist_gpkg, config.checklist_layer_name)
 
     if config.verbose:
         print(

@@ -1,5 +1,6 @@
 import os
 
+from apply_style import apply_roads_completion_style
 from qgis.core import QgsProject
 from roads_completion import RoadsCompletionConfig, run_roads_completion
 
@@ -10,8 +11,10 @@ BUFFER_DIST = 15
 COMPLETION_THRESHOLD = 70
 WALKED_LAYER = "Temporal Overlap with gps"
 CHECKLIST_LAYER = "Temporal Roads Completed Checklist"
+GROUP_NAME = "Roads Completion"
 WALKED_GPKG = os.path.expanduser("~/Documents/qgis/geopackages/walked_roads.gpkg")
 CHECKLIST_GPKG = os.path.expanduser("~/Documents/qgis/geopackages/roads_checklist.gpkg")
+STYLE_QML = os.path.expanduser("~/Documents/qgis/styles/walked.qml")
 TARGET_CRS = "EPSG:3857"
 # ---------------------
 
@@ -36,7 +39,18 @@ result = run_roads_completion(
         completion_threshold=COMPLETION_THRESHOLD,
         crs=TARGET_CRS,
         project=project,
+        register_layers=False,
     )
+)
+
+apply_roads_completion_style(
+    project=project,
+    walked_gpkg_path=WALKED_GPKG,
+    checklist_gpkg_path=CHECKLIST_GPKG,
+    walked_layer_name=WALKED_LAYER,
+    checklist_layer_name=CHECKLIST_LAYER,
+    group_name=GROUP_NAME,
+    style_qml_path=STYLE_QML,
 )
 
 print("=" * 30)

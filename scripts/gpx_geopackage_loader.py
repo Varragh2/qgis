@@ -17,7 +17,7 @@ from qgis.core import (
     QgsVectorLayer,
     QgsWkbTypes,
 )
-from qgis.PyQt.QtCore import QDateTime
+from qgis.PyQt.QtCore import QDateTime, Qt
 
 GPX_NS = {"gpx": "http://www.topografix.com/GPX/1/1"}
 
@@ -64,6 +64,7 @@ def parse_gpx_time_range(path: str) -> tuple[QDateTime | None, QDateTime | None]
         clean_time = time_str.replace("Z", "").replace("T", " ")
         dt = QDateTime.fromString(clean_time, "yyyy-MM-dd HH:mm:ss")
         if dt.isValid():
+            dt.setTimeSpec(Qt.TimeSpec.UTC)
             times.append(dt)
 
     if not times:
