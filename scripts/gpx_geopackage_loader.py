@@ -201,7 +201,9 @@ def import_gpx_directory(
 
     master_layer = ensure_gpkg_layer(gpkg_path, layer_name, dest_crs_authid, project)
 
-    if add_to_project and not project.mapLayersByName(layer_name):
+    if add_to_project:
+        for existing_layer in project.mapLayersByName(layer_name):
+            project.removeMapLayer(existing_layer.id())
         project.addMapLayer(master_layer)
 
     known = existing_filenames(master_layer)

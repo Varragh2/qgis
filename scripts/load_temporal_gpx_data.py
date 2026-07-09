@@ -4,7 +4,7 @@ from gpx_geopackage_loader import import_gpx_directory
 from qgis.core import QgsProject
 
 # --- CONFIGURATION ---
-GPX_FOLDER = os.path.expanduser("~/Documents/qgis/synthetic_data")
+GPX_FOLDER = os.path.expanduser("~/Documents/qgis/real_data")
 GPKG_PATH = os.path.expanduser("~/Documents/qgis/geopackages/gps_temporal_data.gpkg")
 LAYER_NAME = "GPS_temporal_data"
 TARGET_CRS = "EPSG:3857"
