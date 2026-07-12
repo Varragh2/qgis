@@ -1,34 +1,39 @@
-import os
+"""Import the project's collected GPX tracks into the temporal GeoPackage."""
 
-from gpx_geopackage_loader import import_gpx_directory
+from __future__ import annotations
+
+import logging
+
+from constants import GPS_GPKG_PATH, GPS_LAYER_NAME, REAL_DATA_DIR, TARGET_CRS
+from gpx_geopackage_loader import ImportResult, import_gpx_directory
 from qgis.core import QgsProject
 
-# --- CONFIGURATION ---
-GPX_FOLDER = os.path.expanduser("~/Documents/qgis/real_data")
-GPKG_PATH = os.path.expanduser("~/Documents/qgis/geopackages/gps_temporal_data.gpkg")
-LAYER_NAME = "GPS_temporal_data"
-TARGET_CRS = "EPSG:3857"
-# ---------------------
+LOGGER = logging.getLogger(__name__)
 
-result = import_gpx_directory(
-    GPX_FOLDER,
-    GPKG_PATH,
-    LAYER_NAME,
-    TARGET_CRS,
-    QgsProject.instance(),
-)
 
-master_layer = QgsProject.instance().mapLayersByName(LAYER_NAME)
-total = master_layer[0].featureCount() if master_layer else 0
+def main(project: QgsProject | None = None) -> ImportResult:
+    project = project or QgsProject.instance()
+    result = import_gpx_directory(
+        str(REAL_DATA_DIR),
+        str(GPS_GPKG_PATH),
+        GPS_LAYER_NAME,
+        TARGET_CRS,
+        project,
+    )
 
-print("=" * 30)
-print("GPKG IMPORT SUMMARY")
-print(f"File Path: {GPKG_PATH}")
-print(f"New tracks added: {result.added}")
-print(f"Duplicates skipped: {result.skipped}")
-if result.errors:
-    print(f"Errors: {len(result.errors)}")
-    for err in result.errors:
-        print(f"  - {err}")
-print(f"Total tracks in layer: {total}")
-print("=" * 30)
+    master_layer = project.mapLayersByName(GPS_LAYER_NAME)
+    total = master_layer[0].featureCount() if master_layer else 0
+    LOGGER.info("GPKG IMPORT SUMMARY")
+    LOGGER.info("File Path: %s", GPS_GPKG_PATH)
+    LOGGER.info("New tracks added: %s", result.added)
+    LOGGER.info("Duplicates skipped: %s", result.skipped)
+    if result.errors:
+        LOGGER.error("Errors: %s", len(result.errors))
+        for error in result.errors:
+            LOGGER.error("  - %s", error)
+    LOGGER.info("Total tracks in layer: %s", total)
+    return result
+
+
+if __name__ == "__main__":
+    main()

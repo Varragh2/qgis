@@ -3,21 +3,14 @@
 from __future__ import annotations
 
 import hashlib
-import os
+import logging
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-REAL_DATA_DIR = PROJECT_ROOT / "real_data"
+from constants import REAL_DATA_DIR, UPLOAD_SOURCE_DIR
 
-# Update this value if you switch from iCloud Drive to another upload mechanism.
-UPLOAD_SOURCE_DIR = Path(
-    os.environ.get(
-        "GPX_UPLOAD_DIR",
-        "~/Library/Mobile Documents/com~apple~CloudDocs/GPX",
-    )
-).expanduser()
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -93,23 +86,25 @@ def move_new_gpx_files(
 
 
 def main() -> DownloadResult:
-    result = move_new_gpx_files()
+    try:
+        result = move_new_gpx_files()
+    except FileNotFoundError:
+        LOGGER.warning("GPX upload folder not found; continuing without new downloads: %s", UPLOAD_SOURCE_DIR)
+        result = DownloadResult()
 
-    print("=" * 30)
-    print("GPX DOWNLOAD SUMMARY")
-    print(f"Source: {UPLOAD_SOURCE_DIR}")
-    print(f"Destination: {REAL_DATA_DIR}")
-    print(f"Moved: {len(result.moved)}")
+    LOGGER.info("GPX DOWNLOAD SUMMARY")
+    LOGGER.info("Source: %s", UPLOAD_SOURCE_DIR)
+    LOGGER.info("Destination: %s", REAL_DATA_DIR)
+    LOGGER.info("Moved: %s", len(result.moved))
     for path in result.moved:
-        print(f"  + {path.name}")
-    print(f"Duplicates skipped: {len(result.skipped_duplicates)}")
+        LOGGER.info("  + %s", path.name)
+    LOGGER.info("Duplicates skipped: %s", len(result.skipped_duplicates))
     for path in result.skipped_duplicates:
-        print(f"  - {path.name}")
+        LOGGER.info("  - %s", path.name)
     if result.skipped_unavailable:
-        print(f"Unavailable files skipped: {len(result.skipped_unavailable)}")
+        LOGGER.warning("Unavailable files skipped: %s", len(result.skipped_unavailable))
         for path in result.skipped_unavailable:
-            print(f"  ! {path.name}")
-    print("=" * 30)
+            LOGGER.warning("  ! %s", path.name)
 
     return result
 

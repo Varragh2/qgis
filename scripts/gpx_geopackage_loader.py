@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -20,6 +21,7 @@ from qgis.core import (
 from qgis.PyQt.QtCore import QDateTime, Qt
 
 GPX_NS = {"gpx": "http://www.topografix.com/GPX/1/1"}
+LOGGER = logging.getLogger(__name__)
 
 LAYER_SCHEMA_URI = (
     "MultiLineString?crs={crs}"
@@ -218,7 +220,7 @@ def import_gpx_directory(
         start_time, end_time = parse_gpx_time_range(file_path)
 
         if start_time is None and verbose:
-            print(f"Warning: No valid timestamps parsed in {filename}")
+            LOGGER.warning("No valid timestamps parsed in %s", filename)
 
         geom = load_track_geometry(file_path, dest_crs, project)
         if geom is None or geom.isEmpty():
@@ -235,7 +237,7 @@ def import_gpx_directory(
             result.added += 1
             known.add(filename)
             if verbose and start_time is not None:
-                print(f"Added {filename} ({start_time.toString()} – {end_time.toString()})")
+                LOGGER.info("Added %s (%s – %s)", filename, start_time.toString(), end_time.toString())
         else:
             result.errors.append(f"{filename}: feature rejected by layer")
 

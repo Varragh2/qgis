@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 
@@ -35,6 +36,7 @@ CHECKLIST_SCHEMA_URI = (
     "&field=start_date:datetime"
     "&field=end_date:datetime"
 )
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -464,9 +466,10 @@ def run_roads_completion(config: RoadsCompletionConfig) -> CompletionResult:
 
     if new_gps.featureCount() > 0:
         if config.verbose:
-            print(
-                f"Processing {new_gps.featureCount()} new GPS track(s): "
-                f"{', '.join(sorted(set(pending_names)))}"
+            LOGGER.info(
+                "Processing %s new GPS track(s): %s",
+                new_gps.featureCount(),
+                ", ".join(sorted(set(pending_names))),
             )
         intersected = intersect_roads_with_gps(
             roads_dissolved, new_gps, config.buffer_dist
@@ -479,7 +482,7 @@ def run_roads_completion(config: RoadsCompletionConfig) -> CompletionResult:
         )
         result.added_filenames = sorted(set(pending_names))
     elif config.verbose:
-        print("No new GPS filenames to process; refreshing checklist only.")
+        LOGGER.info("No new GPS filenames to process; refreshing checklist only.")
 
     walked_gpkg = QgsVectorLayer(
         f"{config.walked_gpkg_path}|layername={config.walked_layer_name}",
@@ -501,11 +504,12 @@ def run_roads_completion(config: RoadsCompletionConfig) -> CompletionResult:
         _register_layer(project, checklist_gpkg, config.checklist_layer_name)
 
     if config.verbose:
-        print(
-            f"Walked features added: {result.walked_features_added}; "
-            f"skipped filenames: {len(result.skipped_filenames)}"
+        LOGGER.info(
+            "Walked features added: %s; skipped filenames: %s",
+            result.walked_features_added,
+            len(result.skipped_filenames),
         )
-        print(f"Walked GPKG: {config.walked_gpkg_path}")
-        print(f"Checklist GPKG: {config.checklist_gpkg_path}")
+        LOGGER.info("Walked GPKG: %s", config.walked_gpkg_path)
+        LOGGER.info("Checklist GPKG: %s", config.checklist_gpkg_path)
 
     return result
